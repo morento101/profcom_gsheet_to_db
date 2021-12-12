@@ -13,6 +13,7 @@ import psycopg2
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
 from models import Direction, Vacancy, direction_names, Base
+from sqlalchemy.ext.automap import automap_base
 
 # If modifying these scopes, delete the file token.json
 SCOPES = ('https://www.googleapis.com/auth/spreadsheets',)
@@ -66,9 +67,9 @@ class SheetToDbTransporter:
 
         # Get data  about spreadsheet
         sheet_metadata = self.spreadsheet.get(spreadsheetId=self.spreadsheet_id).execute()
-        sheets = sheet_metadata.get('sheets', '')
+        g_sheets = sheet_metadata.get('sheets', '')
 
-        titles = (sheets[index].get("properties", {}).get("title", "") for index in range(len(sheets)))
+        titles = (g_sheets[index].get("properties", {}).get("title", "") for index in range(len(g_sheets)))
 
         return titles
 
@@ -78,8 +79,10 @@ class SheetToDbTransporter:
         spreadsheet = self.spreadsheet
 
         # Getting data from sheet
-        values_response = spreadsheet.values().get(spreadsheetId=self.spreadsheet_id,
-                                             range=f"{sheet_title}!{self.sheet_range}").execute()
+        values_response = spreadsheet.values().get(
+            spreadsheetId=self.spreadsheet_id,
+            range=f"{sheet_title}!{self.sheet_range}"
+        ).execute()
         values = values_response.get('values', [])
 
         if not values:
@@ -87,12 +90,12 @@ class SheetToDbTransporter:
             return None
 
         # Create dict with vacancies
-        vacancies = list()
+        vacancies_dict = list()
         for value in values:
             vacancy_details = {TITLES[i]: value[i] for i in range(len(value))}
-            vacancies.append(vacancy_details)
+            vacancies_dict.append(vacancy_details)
 
-        return vacancies
+        return vacancies_dict
 
     @staticmethod
     def setup_for_db(session, engine):
@@ -128,8 +131,10 @@ if __name__ == '__main__':
     transporter.setup_for_db(db_session, db_engine)
 
     # Getting existing tables' names
-    directions_table = Base.metadata.tables['directions']
-    vacancies_table = Base.metadata.tables['vacancies']
+    Base = automap_base()
+    Base.prepare(db_engine, reflect=True)
+    Direction = Base.classes.directions
+    Vacancy = Base.classes.vacancies
 
     for title in sheets:
         if title:
@@ -140,21 +145,35 @@ if __name__ == '__main__':
                 for vacancy in vacancies:
 
                     # Check if such vacancy already exists, if yes, than continue iteration
-                    if db_session.query(db_session.query(vacancies_table).filter(
-                        vacancies_table.c.company_name == vacancy.get('company_name', ''),
-                        vacancies_table.c.vacancy_name == vacancy.get('vacancy_name', ''),
-                        vacancies_table.c.vacancy_description == vacancy.get('vacancy_description', ''),
-                        vacancies_table.c.vacancy_salary == vacancy.get('vacancy_salary', ''),
-                    ).exists()).scalar():
+                    vacancy_exists = db_session.query(db_session.query(Vacancy).filter_by(
+                        company_name=vacancy.get('company_name', ''),
+                        company_short_description=vacancy.get('company_short_description', ''),
+                        company_direction_id=db_session.query(Direction).filter_by(
+                            name=vacancy.get('company_direction', '')
+                        ).one().id,
+                        vacancy_name=vacancy.get('vacancy_name', ''),
+                        vacancy_description=vacancy.get('vacancy_description', ''),
+                        vacancy_requirements=vacancy.get('vacancy_requirements', ''),
+                        vacancy_working_conditions=vacancy.get('vacancy_working_conditions', ''),
+                        vacancy_salary=vacancy.get('vacancy_salary', ''),
+                        vacancy_benefits=vacancy.get('vacancy_benefits', ''),
+                        vacancy_contacts=vacancy.get('vacancy_contacts', ''),
+                        company_website=vacancy.get('company_website', ''),
+                        degree=vacancy.get('degree', ''),
+                        minimal_english_level=vacancy.get('minimal_english_level', ''),
+                        working_time=vacancy.get('working_time', ''),
+                        working_experience=vacancy.get('working_experience', ''),
+                    ).exists()).scalar()
+
+                    if vacancy_exists:
                         continue
 
                     # Else add vacancy to database
-                    vacancy_db = db_session.execute(
-                        vacancies_table.insert(),
+                    vacancy_db = Vacancy(
                         company_name=vacancy.get('company_name', ''),
                         company_short_description=vacancy.get('company_short_description', ''),
-                        company_direction_id=db_session.query(directions_table).filter(
-                            directions_table.c.name == vacancy.get('company_direction', '')
+                        company_direction_id=db_session.query(Direction).filter_by(
+                            name=vacancy.get('company_direction', '')
                         ).one().id,
                         vacancy_name=vacancy.get('vacancy_name', ''),
                         vacancy_description=vacancy.get('vacancy_description', ''),
@@ -170,28 +189,7 @@ if __name__ == '__main__':
                         working_experience=vacancy.get('working_experience', ''),
                     )
 
+                    db_session.add(vacancy_db)
 
-                    # vacancy_db = Vacancy(
-                    #     company_name=vacancy.get('company_name', ''),
-                    #     company_short_description=vacancy.get('company_short_description', ''),
-                    #     company_direction_id=db_session.query(directions_table).filter(
-                    #         directions_table.c.name == vacancy.get('company_direction', '')
-                    #     ).one().id,
-                    #     vacancy_name=vacancy.get('vacancy_name', ''),
-                    #     vacancy_description=vacancy.get('vacancy_description', ''),
-                    #     vacancy_requirements=vacancy.get('vacancy_requirements', ''),
-                    #     vacancy_working_conditions=vacancy.get('vacancy_working_conditions', ''),
-                    #     vacancy_salary=vacancy.get('vacancy_salary', ''),
-                    #     vacancy_benefits=vacancy.get('vacancy_benefits', ''),
-                    #     vacancy_contacts=vacancy.get('vacancy_contacts', ''),
-                    #     company_website=vacancy.get('company_website', ''),
-                    #     degree=vacancy.get('degree', ''),
-                    #     minimal_english_level=vacancy.get('minimal_english_level', ''),
-                    #     working_time=vacancy.get('working_time', ''),
-                    #     working_experience=vacancy.get('working_experience', ''),
-                    # )
-
-                #     db_session.add(vacancy_db)
-                #
-                # # Confirm adding new data to database
-                # db_session.commit()
+                # Confirm adding new data to database
+                db_session.commit()

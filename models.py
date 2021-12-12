@@ -11,7 +11,7 @@ class Direction(Base):
     __tablename__ = 'directions'
 
     id = Column(Integer, primary_key=True)
-    name = Column(String(90))
+    name = Column(String(120))
     vacancy = relationship('Vacancy')
 
 
@@ -19,10 +19,10 @@ class Vacancy(Base):
     __tablename__ = 'vacancies'
 
     id = Column(Integer, primary_key=True)
-    company_name = Column(String(90))
+    company_name = Column(String(120))
     company_short_description = Column(Text, nullable=True)
     company_direction_id = Column(Integer, ForeignKey(Direction.id, ondelete='RESTRICT'))
-    vacancy_name = Column(String(90))
+    vacancy_name = Column(String(120))
     vacancy_description = Column(Text)
     vacancy_requirements = Column(Text)
     vacancy_working_conditions = Column(Text)
@@ -30,10 +30,10 @@ class Vacancy(Base):
     vacancy_benefits = Column(Text)
     vacancy_contacts = Column(Text)
     company_website = Column(Text, nullable=True)
-    degree = Column(String(90))
+    degree = Column(String(120))
     minimal_english_level = Column(String(20))
-    working_time = Column(String(90))
-    working_experience = Column(String(90))
+    working_time = Column(String(120))
+    working_experience = Column(String(120))
     vacancy_date_added = Column(DateTime, default=datetime.datetime.now())
 
 

@@ -1,5 +1,5 @@
 import os.path
-
+import time
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -149,7 +149,8 @@ if __name__ == '__main__':
                         continue
 
                     # Else add vacancy to database
-                    vacancy_db = Vacancy(
+                    vacancy_db = db_session.execute(
+                        vacancies_table.insert(),
                         company_name=vacancy.get('company_name', ''),
                         company_short_description=vacancy.get('company_short_description', ''),
                         company_direction_id=db_session.query(directions_table).filter(
@@ -169,7 +170,28 @@ if __name__ == '__main__':
                         working_experience=vacancy.get('working_experience', ''),
                     )
 
-                    db_session.add(vacancy_db)
 
-                # Confirm adding new data to database
-                db_session.commit()
+                    # vacancy_db = Vacancy(
+                    #     company_name=vacancy.get('company_name', ''),
+                    #     company_short_description=vacancy.get('company_short_description', ''),
+                    #     company_direction_id=db_session.query(directions_table).filter(
+                    #         directions_table.c.name == vacancy.get('company_direction', '')
+                    #     ).one().id,
+                    #     vacancy_name=vacancy.get('vacancy_name', ''),
+                    #     vacancy_description=vacancy.get('vacancy_description', ''),
+                    #     vacancy_requirements=vacancy.get('vacancy_requirements', ''),
+                    #     vacancy_working_conditions=vacancy.get('vacancy_working_conditions', ''),
+                    #     vacancy_salary=vacancy.get('vacancy_salary', ''),
+                    #     vacancy_benefits=vacancy.get('vacancy_benefits', ''),
+                    #     vacancy_contacts=vacancy.get('vacancy_contacts', ''),
+                    #     company_website=vacancy.get('company_website', ''),
+                    #     degree=vacancy.get('degree', ''),
+                    #     minimal_english_level=vacancy.get('minimal_english_level', ''),
+                    #     working_time=vacancy.get('working_time', ''),
+                    #     working_experience=vacancy.get('working_experience', ''),
+                    # )
+
+                #     db_session.add(vacancy_db)
+                #
+                # # Confirm adding new data to database
+                # db_session.commit()

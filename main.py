@@ -1,5 +1,10 @@
-import os.path
+import os
+import smtplib
+
 from loguru import logger
+
+from dotenv import load_dotenv
+load_dotenv()
 
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -33,7 +38,6 @@ RANGE_NAME = 'B2:P'
 class SheetToDbTransporter:
     """Class for transporting data from google sheet to database"""
 
-    @logger.catch
     def __init__(self, scopes=SCOPES, spreadsheet_id=SPREADSHEET_ID, sheet_range=RANGE_NAME):
         """"Creating connection to Google Sheet API, getting scopes,
         spreadsheet's id and range. Checking if credentials and tokens are valid"""
@@ -98,7 +102,6 @@ class SheetToDbTransporter:
         return vacancies_dict
 
     @staticmethod
-    @logger.catch
     def connect_to_db(user, password, host, port, db_name):
         """Connecting to Postgresql database"""
 
@@ -107,7 +110,6 @@ class SheetToDbTransporter:
         return session, engine
 
     @staticmethod
-    @logger.catch
     def setup_for_db(session, engine):
         """Use this method for database without vacancies
         and directions tables"""
@@ -124,37 +126,29 @@ class SheetToDbTransporter:
             return True
 
     @staticmethod
-    @logger.catch
-    def check_if_vacancy_exists_db(session):
-        exists = session.query(session.query(Vacancy).filter_by(
-            company_name=vacancy_from_dict.get('company_name', ''),
-            company_short_description=vacancy_from_dict.get('company_short_description', ''),
-            company_direction_id=db_session.query(Direction).filter_by(
-                name=vacancy_from_dict.get('company_direction', '')
-            ).one().id,
-            vacancy_name=vacancy_from_dict.get('vacancy_name', ''),
-            vacancy_description=vacancy_from_dict.get('vacancy_description', ''),
-            vacancy_requirements=vacancy_from_dict.get('vacancy_requirements', ''),
-            vacancy_working_conditions=vacancy_from_dict.get('vacancy_working_conditions', ''),
-            vacancy_salary=vacancy_from_dict.get('vacancy_salary', ''),
-            vacancy_benefits=vacancy_from_dict.get('vacancy_benefits', ''),
-            vacancy_contacts=vacancy_from_dict.get('vacancy_contacts', ''),
-            company_website=vacancy_from_dict.get('company_website', ''),
-            degree=vacancy_from_dict.get('degree', ''),
-            minimal_english_level=vacancy_from_dict.get('minimal_english_level', ''),
-            working_time=vacancy_from_dict.get('working_time', ''),
-            working_experience=vacancy_from_dict.get('working_experience', ''),
+    def check_if_vacancy_exists_db(session, vacancy, vacancy_cls):
+        exists = session.query(session.query(vacancy_cls).filter_by(
+            company_name=vacancy.get('company_name', ''),
+            vacancy_name=vacancy.get('vacancy_name', ''),
+            vacancy_description=vacancy.get('vacancy_description', ''),
+            vacancy_requirements=vacancy.get('vacancy_requirements', ''),
+            vacancy_working_conditions=vacancy.get('vacancy_working_conditions', ''),
+            vacancy_salary=vacancy.get('vacancy_salary', ''),
+            vacancy_benefits=vacancy.get('vacancy_benefits', ''),
+            degree=vacancy.get('degree', ''),
+            minimal_english_level=vacancy.get('minimal_english_level', ''),
+            working_time=vacancy.get('working_time', ''),
+            working_experience=vacancy.get('working_experience', ''),
         ).exists()).scalar()
 
         return exists
 
     @staticmethod
-    @logger.catch
-    def add_vacancy_to_db(session, vacancy, vacancy_cls):
+    def add_vacancy_to_db(session, vacancy, vacancy_cls, direction_cls):
         vacancy_to_db = vacancy_cls(
             company_name=vacancy.get('company_name', ''),
             company_short_description=vacancy.get('company_short_description', ''),
-            company_direction_id=db_session.query(Direction).filter_by(
+            company_direction_id=session.query(direction_cls).filter_by(
                 name=vacancy.get('company_direction', '')
             ).one().id,
             vacancy_name=vacancy.get('vacancy_name', ''),
@@ -174,21 +168,26 @@ class SheetToDbTransporter:
         session.add(vacancy_to_db)
 
 
-if __name__ == '__main__':
+def main():
     # Config logs: file, format of the log, level, max size 50 KB, after 50 KB compress to zip
     logger.add("logs.log", format="{time} {level} {message}", level="DEBUG", rotation="50 KB", compression="zip")
 
     logger.info("Скрипт розпочав роботу!")
+
     transporter = SheetToDbTransporter()  # Utilizing custom class
     logger.info("Підключилисьдо Google Sheet!")
+
     sheets = transporter.get_tuple_of_sheets()  # Getting all sheets' titles from spreadsheet
     logger.info("Дані з Google Sheet були зібрані!")
 
     # Creating connection to db
-    db_session, db_engine = transporter.connect_to_db('postgres', 'postgres', '127.0.0.1', '5432', 'test_sheet')
-    logger.info("Підключились до бази данних!")
+    db_user = os.getenv("DB_USER")
+    db_password = os.getenv("DB_PASSWORD")
+    db_host = os.getenv("DB_HOST")
+    db_port = os.getenv("DB_PORT")
+    db_session, db_engine = transporter.connect_to_db(db_user, db_password, db_host, db_port, 'test_sheet')
 
-    # Method below works only if tables are not creates
+    # Method below works only if tables are not created
     if transporter.setup_for_db(db_session, db_engine):
         logger.info("Таблиці в базі даних не знайдені, були створенні власні!")
 
@@ -208,12 +207,12 @@ if __name__ == '__main__':
                 for vacancy_from_dict in vacancies:
 
                     # Check if such vacancy already exists, if yes, than continue iteration
-                    vacancy_exists = transporter.check_if_vacancy_exists_db(db_session)
+                    vacancy_exists = transporter.check_if_vacancy_exists_db(db_session, vacancy_from_dict, Vacancy)
                     if vacancy_exists:
                         continue
 
                     # Else add vacancy to database
-                    transporter.add_vacancy_to_db(db_session, vacancy_from_dict, Vacancy)
+                    transporter.add_vacancy_to_db(db_session, vacancy_from_dict, Vacancy, Direction)
                     logger.info(
                         f"Було додано вакансію {vacancy_from_dict.get('vacancy_name', '')}, від {vacancy_from_dict.get('company_name', '')}"
                     )
@@ -222,3 +221,28 @@ if __name__ == '__main__':
                 db_session.commit()
 
     logger.info("Скрипт завершив свою роботу!")
+
+if __name__ == '__main__':
+    try:
+        main()
+
+    except Exception as e:
+        logger.exception(f"{e}")
+
+        with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
+            smtp.ehlo()
+            smtp.starttls()
+            smtp.ehlo()
+
+            sender_email = os.getenv("SENDER_EMAIL")
+            sender_email_password = os.getenv("SENDER_EMAIL_PASSWORD")
+
+            smtp.login(sender_email, sender_email_password)
+
+            subject = "GSHEET TO DB SCRIPT IS DOWN"
+            body = "check it"
+            msg = f"Subject: {subject}\n\n{body}"
+
+            receiver_email = os.getenv("RECEIVER_EMAIL")
+
+            smtp.sendmail(sender_email, receiver_email, msg)

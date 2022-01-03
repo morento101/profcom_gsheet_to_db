@@ -1,5 +1,6 @@
 import os
 import smtplib
+import time
 
 from loguru import logger
 
@@ -169,9 +170,6 @@ class SheetToDbTransporter:
 
 
 def main():
-    # Config logs: file, format of the log, level, max size 50 KB, after 50 KB compress to zip
-    logger.add("logs.log", format="{time} {level} {message}", level="DEBUG", rotation="50 KB", compression="zip")
-
     logger.info("Скрипт розпочав роботу!")
 
     transporter = SheetToDbTransporter()  # Utilizing custom class
@@ -223,8 +221,18 @@ def main():
     logger.info("Скрипт завершив свою роботу!")
 
 if __name__ == '__main__':
+    
     try:
-        main()
+        # Config logs: file, format of the log, level, max size 50 KB, after 50 KB compress to zip
+        logger.add("logs.log", format="{time} {level} {message}", level="DEBUG", rotation="50 KB", compression="zip")
+
+        while True:
+            start = time.perf_counter()
+            main()
+            end = time.perf_counter()
+            logger.success(f"Витрачено часу: {end - start} секунд")
+            time.sleep(1)
+
 
     except Exception as e:
         logger.exception(f"{e}")

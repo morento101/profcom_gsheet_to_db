@@ -1,6 +1,8 @@
 import os
+# from pprint import pprint
 import smtplib
 import time
+import psutil
 
 from loguru import logger
 
@@ -32,7 +34,9 @@ TITLES = (
 )
 
 # The ID and range of a sample spreadsheet.
-SPREADSHEET_ID = '1nU3wT-ywI5ePxhRVEksmxQDem-TJfCbsoZBsBerdnOM'
+SPREADSHEET_ID = '1nU3wT-ywI5ePxhRVEksmxQDem-TJfCbsoZBsBerdnOM' # profcom sheet
+SPREADSHEET_ID = '1X-h7LDj--O2FFNCwsY97kohDVbLsCW5LCq-I0d7l3r8' # my testing sheet
+
 RANGE_NAME = 'B2:P'
 
 
@@ -88,6 +92,7 @@ class SheetToDbTransporter:
             spreadsheetId=self.spreadsheet_id,
             range=f"{sheet_title}!{self.sheet_range}"
         ).execute()
+        
         values = values_response.get('values', [])
 
         if not values:
@@ -95,12 +100,12 @@ class SheetToDbTransporter:
             return None
 
         # Create dict with vacancies
-        vacancies_dict = list()
+        vacancies_dicts = list()
         for value in values:
             vacancy_details = {TITLES[i]: value[i] for i in range(len(value))}
-            vacancies_dict.append(vacancy_details)
+            vacancies_dicts.append(vacancy_details)
 
-        return vacancies_dict
+        return vacancies_dicts
 
     @staticmethod
     def connect_to_db(user, password, host, port, db_name):
@@ -128,44 +133,12 @@ class SheetToDbTransporter:
 
     @staticmethod
     def check_if_vacancy_exists_db(session, vacancy, vacancy_cls):
-        exists = session.query(session.query(vacancy_cls).filter_by(
-            company_name=vacancy.get('company_name', ''),
-            vacancy_name=vacancy.get('vacancy_name', ''),
-            vacancy_description=vacancy.get('vacancy_description', ''),
-            vacancy_requirements=vacancy.get('vacancy_requirements', ''),
-            vacancy_working_conditions=vacancy.get('vacancy_working_conditions', ''),
-            vacancy_salary=vacancy.get('vacancy_salary', ''),
-            vacancy_benefits=vacancy.get('vacancy_benefits', ''),
-            degree=vacancy.get('degree', ''),
-            minimal_english_level=vacancy.get('minimal_english_level', ''),
-            working_time=vacancy.get('working_time', ''),
-            working_experience=vacancy.get('working_experience', ''),
-        ).exists()).scalar()
-
+        exists = session.query(session.query(vacancy_cls).filter_by(**vacancy).exists()).scalar()
         return exists
 
     @staticmethod
-    def add_vacancy_to_db(session, vacancy, vacancy_cls, direction_cls):
-        vacancy_to_db = vacancy_cls(
-            company_name=vacancy.get('company_name', ''),
-            company_short_description=vacancy.get('company_short_description', ''),
-            company_direction_id=session.query(direction_cls).filter_by(
-                name=vacancy.get('company_direction', '')
-            ).one().id,
-            vacancy_name=vacancy.get('vacancy_name', ''),
-            vacancy_description=vacancy.get('vacancy_description', ''),
-            vacancy_requirements=vacancy.get('vacancy_requirements', ''),
-            vacancy_working_conditions=vacancy.get('vacancy_working_conditions', ''),
-            vacancy_salary=vacancy.get('vacancy_salary', ''),
-            vacancy_benefits=vacancy.get('vacancy_benefits', ''),
-            vacancy_contacts=vacancy.get('vacancy_contacts', ''),
-            company_website=vacancy.get('company_website', ''),
-            degree=vacancy.get('degree', ''),
-            minimal_english_level=vacancy.get('minimal_english_level', ''),
-            working_time=vacancy.get('working_time', ''),
-            working_experience=vacancy.get('working_experience', ''),
-        )
-
+    def add_vacancy_to_db(session, vacancy, vacancy_cls):
+        vacancy_to_db = vacancy_cls(**vacancy)
         session.add(vacancy_to_db)
 
 
@@ -203,6 +176,9 @@ def main():
             vacancies = transporter.get_vacancies_from_sheet(title)
             if vacancies:
                 for vacancy_from_dict in vacancies:
+                    # pprint(vacancy_from_dict)
+
+                    vacancy_from_dict['company_direction'] = db_session.query(Direction).filter_by(name=vacancy_from_dict.get('company_direction', '')).one().id
 
                     # Check if such vacancy already exists, if yes, than continue iteration
                     vacancy_exists = transporter.check_if_vacancy_exists_db(db_session, vacancy_from_dict, Vacancy)
@@ -210,7 +186,7 @@ def main():
                         continue
 
                     # Else add vacancy to database
-                    transporter.add_vacancy_to_db(db_session, vacancy_from_dict, Vacancy, Direction)
+                    transporter.add_vacancy_to_db(db_session, vacancy_from_dict, Vacancy)
                     logger.info(
                         f"Було додано вакансію {vacancy_from_dict.get('vacancy_name', '')}, від {vacancy_from_dict.get('company_name', '')}"
                     )
@@ -231,7 +207,8 @@ if __name__ == '__main__':
             main()
             end = time.perf_counter()
             logger.success(f"Витрачено часу: {end - start} секунд")
-            time.sleep(1)
+            logger.success(f"Витрачено пам'яті {psutil.Process(os.getpid()).memory_info().rss / 1024 ** 2} МБ")
+            time.sleep(15)
 
 
     except Exception as e:

@@ -21,7 +21,7 @@ class Vacancy(Base):
     id = Column(Integer, primary_key=True)
     company_name = Column(String(120))
     company_short_description = Column(Text, nullable=True)
-    company_direction_id = Column(Integer, ForeignKey(Direction.id, ondelete='RESTRICT'))
+    company_direction = Column(Integer, ForeignKey(Direction.id, ondelete='RESTRICT'))
     vacancy_name = Column(String(120))
     vacancy_description = Column(Text)
     vacancy_requirements = Column(Text)

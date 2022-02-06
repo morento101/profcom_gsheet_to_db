@@ -35,7 +35,6 @@ TITLES = (
 
 # The ID and range of a sample spreadsheet.
 SPREADSHEET_ID = '1nU3wT-ywI5ePxhRVEksmxQDem-TJfCbsoZBsBerdnOM' # profcom sheet
-SPREADSHEET_ID = '1X-h7LDj--O2FFNCwsY97kohDVbLsCW5LCq-I0d7l3r8' # my testing sheet
 
 RANGE_NAME = 'B2:P'
 
